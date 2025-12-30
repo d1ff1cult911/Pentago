@@ -1,0 +1,8 @@
+public enum CellState
+{
+    Empty,
+    P1,
+    P2,
+    P3,
+    P4
+}
