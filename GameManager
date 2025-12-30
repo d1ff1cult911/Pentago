@@ -1,0 +1,26 @@
+using UnityEngine;
+
+public class GameManager : MonoBehaviour
+{
+    public static GameManager Instance;
+    public int blocksPerSide = 3;
+    public int blockSize = 3;
+
+    public BoardManagerMono boardManager;
+    public int playerCount = 3;
+    void Awake()
+    {
+        if (Instance == null) Instance = this;
+        else Destroy(gameObject);
+    }
+
+    void Start()
+    {
+        // Создаём доску
+        boardManager = gameObject.AddComponent<BoardManagerMono>();
+        boardManager.blocksPerSide = blocksPerSide;
+        boardManager.blockSize = blockSize;
+        boardManager.playerCount = playerCount;
+        boardManager.winLength = blocksPerSide<=blockSize? blockSize:blocksPerSide;
+    }
+}
