@@ -1,0 +1,339 @@
+using System.ComponentModel.Design.Serialization;
+using UnityEngine;
+
+
+public class BoardManagerMono : MonoBehaviour
+{
+    public enum GamePhase { PlaceMark, RotateBlock }
+    private CellView[,] cellViews;
+    public int winLength;
+    public int blocksPerSide;
+    public int blockSize = 3;
+    public GameObject boardRoot;
+    private bool gameOver = false;
+    private CellState winner = CellState.Empty;
+    public float gap = 0.2f;
+    public float cellSize = 1f;
+    public float tableThickness = 0.1f;
+
+    public GamePhase currentPhase = GamePhase.PlaceMark;
+    public bool isXTurn = true;
+
+    private int boardSize;
+    private CellState[,] board;
+
+    private BlockController[,] blocks;
+    private BlockController selectedBlock;
+    public int playerCount;
+    private int currentPlayer = 0;
+
+    private Color[] playerColors =
+    {
+    Color.red,
+    Color.blue,
+    Color.green,
+    Color.yellow
+};
+    void Start()
+    {
+        boardSize = blocksPerSide * blockSize;
+        board = new CellState[boardSize, boardSize];
+        blocks = new BlockController[blocksPerSide, blocksPerSide];
+        cellViews = new CellView[boardSize, boardSize];
+        CreateTable();
+        CreateBoard();
+
+        SetAllBlockColliders(false);
+
+        Debug.Log("[Board] Ready. Phase = PlaceMark");
+    }
+
+    void CreateTable()
+    {
+        GameObject table = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        table.name = "Table";
+
+        float size = boardSize * cellSize + (blocksPerSide - 1) * gap;
+        table.transform.localScale = new Vector3(size * 1.15f, tableThickness, size * 1.15f);
+        table.transform.position = new Vector3(0, -tableThickness / 2f, 0);
+
+        table.GetComponent<MeshRenderer>().material.color =
+            new Color(0.6f, 0.3f, 0.1f);
+
+        Destroy(table.GetComponent<BoxCollider>()); // столу коллайдер не нужен
+    }
+
+    void CreateBoard()
+    {
+        boardRoot = new GameObject("Board");
+
+        float offset = (boardSize * cellSize + (blocksPerSide - 1) * gap) / 2f;
+
+        for (int bx = 0; bx < blocksPerSide; bx++)
+        {
+            for (int by = 0; by < blocksPerSide; by++)
+            {
+                GameObject blockGO = new GameObject($"Block_{bx}_{by}");
+                blockGO.transform.parent = boardRoot.transform;
+
+                float px = (bx * blockSize + blockSize / 2f) * cellSize + bx * gap - offset;
+                float pz = (by * blockSize + blockSize / 2f) * cellSize + by * gap - offset;
+                blockGO.transform.position = new Vector3(px, 0.15f, pz);
+
+                BoxCollider col = blockGO.AddComponent<BoxCollider>();
+                col.size = new Vector3(blockSize * cellSize, 1f, blockSize * cellSize);
+                col.center = new Vector3(0, 0.5f, 0);
+
+                BlockController bc = blockGO.AddComponent<BlockController>();
+                bc.Init(bx, by, this);
+                blocks[bx, by] = bc;
+
+                // Подложка
+                GameObject baseGO = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                baseGO.transform.parent = blockGO.transform;
+                baseGO.transform.localScale =
+                    new Vector3(blockSize * cellSize * 1.03f, 0.1f, blockSize * cellSize * 1.03f);
+                baseGO.transform.localPosition = new Vector3(0, -0.05f, 0);
+                baseGO.GetComponent<MeshRenderer>().material.color = Color.black;
+
+                Destroy(baseGO.GetComponent<BoxCollider>());
+
+                // Клетки
+                for (int x = 0; x < blockSize; x++)
+                {
+                    for (int y = 0; y < blockSize; y++)
+                    {
+                        int gx = bx * blockSize + x;
+                        int gy = by * blockSize + y;
+
+                        GameObject cell = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        cell.name = ($"Cell_{gx}_{gy}");
+                        cell.transform.parent = blockGO.transform;
+                        cell.transform.localScale =
+                            new Vector3(cellSize * 0.95f, 0.02f, cellSize * 0.95f);
+
+                        float cx = (x - blockSize / 2f + 0.5f) * cellSize;
+                        float cz = (y - blockSize / 2f + 0.5f) * cellSize;
+                        cell.transform.localPosition = new Vector3(cx, 0.02f, cz);
+
+                        CellView cv = cell.AddComponent<CellView>();
+                        cv.Init(gx, gy, this);
+                        cellViews[gx, gy] = cv;
+                    }
+                }
+            }
+        }
+    }
+    void UpdateCellViewsAfterRotation(int bx, int by, bool clockwise)
+    {
+        int startX = bx * blockSize;
+        int startY = by * blockSize;
+
+        CellView[,] temp = new CellView[blockSize, blockSize];
+
+        // Сохраняем старые ссылки
+        for (int x = 0; x < blockSize; x++)
+            for (int y = 0; y < blockSize; y++)
+                temp[x, y] = cellViews[startX + x, startY + y];
+
+        // Перекладываем
+        for (int x = 0; x < blockSize; x++)
+        {
+            for (int y = 0; y < blockSize; y++)
+            {
+                int nx = clockwise ? y : blockSize - 1 - y;
+                int ny = clockwise ? blockSize - 1 - x : x;
+
+                CellView cv = temp[x, y];
+                cellViews[startX + nx, startY + ny] = cv;
+
+                // 🔥 ОБНОВЛЯЕМ КООРДИНАТЫ
+                cv.SetCoords(startX + nx, startY + ny);
+            }
+        }
+    }
+
+    public void RotateBlockData(int bx, int by, bool clockwise)
+    {
+        int startX = bx * blockSize;
+        int startY = by * blockSize;
+
+        CellState[,] temp = new CellState[blockSize, blockSize];
+
+        for (int x = 0; x < blockSize; x++)
+            for (int y = 0; y < blockSize; y++)
+                temp[x, y] = board[startX + x, startY + y];
+
+        for (int x = 0; x < blockSize; x++)
+            for (int y = 0; y < blockSize; y++)
+            {
+                int nx = clockwise ? y : blockSize - 1 - y;
+                int ny = clockwise ? blockSize - 1 - x : x;
+                board[startX + nx, startY + ny] = temp[x, y];
+            }
+        if (CheckWin())
+        {
+            OnWin(winner);
+            return;
+        }
+
+        // следующий игрок
+        currentPlayer = (currentPlayer + 1) % playerCount;
+
+        currentPhase = GamePhase.PlaceMark;
+
+        UpdateCellViewsAfterRotation(bx, by, clockwise);
+        Debug.Log($"[Logic] Block {bx},{by} rotated {(clockwise ? "CW" : "CCW")}");
+
+    }
+    private bool CheckDirection(int startX, int startY, int dirX, int dirY, CellState target)
+    {
+        for (int i = 0; i < winLength; i++)
+        {
+            int x = startX + dirX * i;
+            int y = startY + dirY * i;
+
+            if (x < 0 || x >= boardSize || y < 0 || y >= boardSize)
+                return false;
+
+            if (board[x, y] != target)
+                return false;
+        }
+        return true;
+    }
+    private void OnWin(CellState winner)
+    {
+        gameOver = true;
+
+        Debug.Log($"🏆 WINNER: {winner}");
+
+        SetAllBlockColliders(false);
+    }
+
+    private bool CheckWin()
+    {
+        for (int x = 0; x < boardSize; x++)
+        {
+            for (int y = 0; y < boardSize; y++)
+            {
+                CellState state = board[x, y];
+                if (state == CellState.Empty)
+                    continue;
+
+                if (CheckDirection(x, y, 1, 0, state) ||     // →
+                    CheckDirection(x, y, 0, 1, state) ||     // ↓
+                    CheckDirection(x, y, 1, 1, state) ||     // ↘
+                    CheckDirection(x, y, 1, -1, state))      // ↗
+                {
+                    winner = state;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+
+    void Update()
+    {
+        if (!Input.GetMouseButtonDown(0)) return;
+
+        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+        if (!Physics.Raycast(ray, out RaycastHit hit)) return;
+
+        CellView cell = hit.transform.GetComponent<CellView>();
+        if (cell != null)
+        {
+            cell.OnClick();
+            return;
+        }
+
+        BlockController block =
+            hit.transform.GetComponent<BlockController>() ??
+            hit.transform.GetComponentInParent<BlockController>();
+
+        if (block != null && currentPhase == GamePhase.RotateBlock)
+        {
+            SelectBlock(block);
+        }
+    }
+
+    void SelectBlock(BlockController block)
+    {
+        Debug.Log($"[Input] Block selected");
+        if (selectedBlock == block) return;
+
+        if (selectedBlock != null)
+            selectedBlock.Lower();
+
+        selectedBlock = block;
+        selectedBlock.Raise();
+        ConfirmRotation();
+    }
+
+
+    public void ConfirmRotation()
+    {
+        if (selectedBlock == null) return;
+
+        selectedBlock.Rotate();
+    }
+
+    public void PlaceMark(int x, int y)
+    {
+        if (gameOver)
+            return;
+
+        if (currentPhase != GamePhase.PlaceMark)
+            return;
+
+        if (x < 0 || x >= boardSize || y < 0 || y >= boardSize)
+            return;
+
+        if (board[x, y] != CellState.Empty)
+            return;
+
+        // текущий игрок
+        CellState playerState = (CellState)(currentPlayer + 1);
+
+        // логика
+        board[x, y] = playerState;
+
+        // визуал
+        CellView cv = cellViews[x, y];
+        cv.SetColor(playerColors[currentPlayer]);
+
+        Debug.Log($"[Move] Player {playerState} at {x},{y}");
+
+        // 🔥 ПРОВЕРКА ПОБЕДЫ ПОСЛЕ ХОДА
+        if (CheckWin())
+        {
+            OnWin(winner);
+            return;
+        }
+
+        // переход к фазе вращения
+        currentPhase = GamePhase.RotateBlock;
+        SetAllBlockColliders(true);
+
+        // смена игрока будет ПОСЛЕ вращения
+    }
+
+
+
+
+    public void OnRotationFinished()
+    {
+        selectedBlock = null;
+        currentPhase = GamePhase.PlaceMark;
+
+        SetAllBlockColliders(false);
+        Debug.Log("[Phase] PlaceMark");
+    }
+
+    void SetAllBlockColliders(bool active)
+    {
+        foreach (var b in blocks)
+            b.SetCollider(active);
+    }
+}
