@@ -1,0 +1,34 @@
+using UnityEngine;
+
+public class CellView : MonoBehaviour
+{
+    private int x, y;
+    private BoardManagerMono board;
+    private MeshRenderer meshRenderer;
+    public void Init(int gx, int gy, BoardManagerMono manager)
+    {
+        x = gx;
+        y = gy;
+        board = manager;
+        GetComponent<MeshRenderer>().material.color = Color.white;
+    }
+
+    public void OnClick()
+    {
+        board.PlaceMark(x, y);
+    }
+    public void SetCoords(int newX, int newY)
+    {
+        x = newX;
+        y = newY;
+    }
+    public void SetColor(Color color)
+    {
+        if (meshRenderer == null)
+            meshRenderer = GetComponent<MeshRenderer>();
+
+        meshRenderer.material.color = color;
+    }
+    
+
+}
