@@ -1,0 +1,115 @@
+using UnityEngine;
+using System.Collections;
+using Unity.VisualScripting;
+using UnityEngine.UI;
+using UnityEngine.UIElements;
+using UnityEngine.InputSystem;
+
+public class BlockController : MonoBehaviour
+{
+    private int bx, by;
+    private BoardManagerMono board;
+    private BoxCollider col;
+
+    private Vector3 basePosition;
+    private bool isRaised = false;
+
+    public void Init(int x, int y, BoardManagerMono manager)
+    {
+        bx = x;
+        by = y;
+        board = manager;
+        col = GetComponent<BoxCollider>();
+        basePosition = transform.position;
+    }
+
+    public void SetCollider(bool active)
+    {
+        col.enabled = active;
+    }
+
+    public void Raise()
+    {
+        Debug.Log($"[Visual] Raising block {bx},{by}");
+        if (isRaised) return;
+        StopAllCoroutines();
+        StartCoroutine(MoveTo(basePosition + Vector3.up * 0.5f));
+        isRaised = true;
+    }
+
+    public void Lower()
+    {
+        if (!isRaised) return;
+        StopAllCoroutines();
+        StartCoroutine(MoveTo(basePosition));
+        isRaised = false;
+    }
+
+    public void Rotate()
+    {
+        StartCoroutine(RotateRoutine());
+    }
+
+    public IEnumerator RotateRoutine()
+    {
+
+        Vector3 startPos = transform.position;
+        Vector3 upPos = startPos + Vector3.up * 0.5f;
+
+        float t = 0;
+        while (t < 1)
+        {
+            t += Time.deltaTime / 0.2f;
+            transform.position = Vector3.Lerp(startPos, upPos, t);
+            yield return null;
+        }
+
+        bool clockwise = false;
+        bool chosen = false;
+
+        Debug.Log("[Rotate] Press ← or →");
+
+        while (!chosen)
+        {
+            if (Input.GetKeyDown(KeyCode.LeftArrow)) { clockwise = false; chosen = true; }
+            if (Input.GetKeyDown(KeyCode.RightArrow)) { clockwise = true; chosen = true; }
+            yield return null;
+        }
+
+        board.RotateBlockData(bx, by, clockwise);
+
+        Quaternion from = transform.rotation;
+        Quaternion to = from * Quaternion.Euler(0, clockwise ? 90 : -90, 0);
+
+        t = 0;
+        while (t < 1)
+        {
+            t += Time.deltaTime / 0.3f;
+            transform.rotation = Quaternion.Slerp(from, to, t);
+            yield return null;
+        }
+
+        t = 0;
+        while (t < 1)
+        {
+            t += Time.deltaTime / 0.2f;
+            transform.position = Vector3.Lerp(upPos, startPos, t);
+            yield return null;
+        }
+
+        board.OnRotationFinished();
+    }
+
+    IEnumerator MoveTo(Vector3 target)
+    {
+        Vector3 start = transform.position;
+        float t = 0;
+
+        while (t < 1)
+        {
+            t += Time.deltaTime / 0.2f;
+            transform.position = Vector3.Lerp(start, target, t);
+            yield return null;
+        }
+    }
+}
