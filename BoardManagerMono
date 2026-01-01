@@ -1,5 +1,8 @@
+using System.Collections;
+using System.Collections.Generic;
 using System.ComponentModel.Design.Serialization;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 
 public class BoardManagerMono : MonoBehaviour
@@ -15,7 +18,7 @@ public class BoardManagerMono : MonoBehaviour
     public float gap = 0.2f;
     public float cellSize = 1f;
     public float tableThickness = 0.1f;
-
+    private int blocksSelected = 0;
     public GamePhase currentPhase = GamePhase.PlaceMark;
     public bool isXTurn = true;
 
@@ -23,7 +26,8 @@ public class BoardManagerMono : MonoBehaviour
     private CellState[,] board;
 
     private BlockController[,] blocks;
-    private BlockController selectedBlock;
+    private List<BlockController> selectedBlocks = new List<BlockController>();
+    private const int maxBlocks = 3;
     public int playerCount;
     private int currentPlayer = 0;
 
@@ -106,6 +110,7 @@ public class BoardManagerMono : MonoBehaviour
                         int gx = bx * blockSize + x;
                         int gy = by * blockSize + y;
 
+
                         GameObject cell = GameObject.CreatePrimitive(PrimitiveType.Cube);
                         cell.name = ($"Cell_{gx}_{gy}");
                         cell.transform.parent = blockGO.transform;
@@ -153,39 +158,35 @@ public class BoardManagerMono : MonoBehaviour
         }
     }
 
-    public void RotateBlockData(int bx, int by, bool clockwise)
+    public void RotateBlocksData(List<BlockController> blocks, bool clockwise)
     {
-        int startX = bx * blockSize;
-        int startY = by * blockSize;
-
-        CellState[,] temp = new CellState[blockSize, blockSize];
-
-        for (int x = 0; x < blockSize; x++)
-            for (int y = 0; y < blockSize; y++)
-                temp[x, y] = board[startX + x, startY + y];
-
-        for (int x = 0; x < blockSize; x++)
-            for (int y = 0; y < blockSize; y++)
-            {
-                int nx = clockwise ? y : blockSize - 1 - y;
-                int ny = clockwise ? blockSize - 1 - x : x;
-                board[startX + nx, startY + ny] = temp[x, y];
-            }
-        if (CheckWin())
+        foreach (var b in blocks)
         {
-            OnWin(winner);
-            return;
+            int bx = b.bx; // сделай свойство Bx/BY public
+            int by = b.by;
+
+            int startX = bx * blockSize;
+            int startY = by * blockSize;
+
+            CellState[,] temp = new CellState[blockSize, blockSize];
+
+            // копируем текущие значения
+            for (int x = 0; x < blockSize; x++)
+                for (int y = 0; y < blockSize; y++)
+                    temp[x, y] = board[startX + x, startY + y];
+
+            // поворачиваем
+            for (int x = 0; x < blockSize; x++)
+                for (int y = 0; y < blockSize; y++)
+                {
+                    int nx = clockwise ? y : blockSize - 1 - y;
+                    int ny = clockwise ? blockSize - 1 - x : x;
+                    board[startX + nx, startY + ny] = temp[x, y];
+                }
         }
-
-        // следующий игрок
-        currentPlayer = (currentPlayer + 1) % playerCount;
-
-        currentPhase = GamePhase.PlaceMark;
-
-        UpdateCellViewsAfterRotation(bx, by, clockwise);
-        Debug.Log($"[Logic] Block {bx},{by} rotated {(clockwise ? "CW" : "CCW")}");
-
     }
+
+
     private bool CheckDirection(int startX, int startY, int dirX, int dirY, CellState target)
     {
         for (int i = 0; i < winLength; i++)
@@ -222,8 +223,8 @@ public class BoardManagerMono : MonoBehaviour
 
                 if (CheckDirection(x, y, 1, 0, state) ||     // →
                     CheckDirection(x, y, 0, 1, state) ||     // ↓
-                    CheckDirection(x, y, 1, 1, state) ||     // ↘
-                    CheckDirection(x, y, 1, -1, state))      // ↗
+                    CheckDirection(x, y, 1, 1, state) ||     // ↘️
+                    CheckDirection(x, y, 1, -1, state))      // ↗️
                 {
                     winner = state;
                     return true;
@@ -257,27 +258,126 @@ public class BoardManagerMono : MonoBehaviour
             SelectBlock(block);
         }
     }
+    public void RotateBlockData(int bx, int by, bool clockwise)
+    {
+        int startX = bx * blockSize;
+        int startY = by * blockSize;
+
+        CellState[,] temp = new CellState[blockSize, blockSize];
+
+        for (int x = 0; x < blockSize; x++)
+            for (int y = 0; y < blockSize; y++)
+                temp[x, y] = board[startX + x, startY + y];
+
+        for (int x = 0; x < blockSize; x++)
+            for (int y = 0; y < blockSize; y++)
+            {
+                int nx = clockwise ? y : blockSize - 1 - y;
+                int ny = clockwise ? blockSize - 1 - x : x;
+                board[startX + nx, startY + ny] = temp[x, y];
+            }
+        if (CheckWin())
+        {
+            OnWin(winner);
+            return;
+        }
+
+        // следующий игрок
+        currentPlayer = (currentPlayer + 1) % playerCount;
+
+        currentPhase = GamePhase.PlaceMark;
+
+        UpdateCellViewsAfterRotation(bx, by, clockwise);
+        Debug.Log($"[Logic] Block {bx},{by} rotated {(clockwise ? "CW" : "CCW")}");
+
+    }
 
     void SelectBlock(BlockController block)
     {
-        Debug.Log($"[Input] Block selected");
-        if (selectedBlock == block) return;
+        if (block == null) return;
+        if (selectedBlocks.Contains(block)) return;
 
-        if (selectedBlock != null)
-            selectedBlock.Lower();
+        if (selectedBlocks.Count >= maxBlocks)
+        {
+            BlockController first = selectedBlocks[0];
+            if (first != null)
+                first.Lower();
+            selectedBlocks.RemoveAt(0);
+        }
 
-        selectedBlock = block;
-        selectedBlock.Raise();
-        ConfirmRotation();
+        selectedBlocks.Add(block);
+        block.Raise();
+
+        if (selectedBlocks.Count == maxBlocks)
+        {
+            StartCoroutine(RotateSelectedBlocks());
+        }
     }
 
-
-    public void ConfirmRotation()
+    private IEnumerator RotateSelectedBlocks()
     {
-        if (selectedBlock == null) return;
+        // Ждем, пока все блоки поднимутся
+        foreach (var b in selectedBlocks)
+            yield return b.WaitForRaise();
 
-        selectedBlock.Rotate();
+        // Определяем направление вращения
+        bool clockwise = false;
+        bool chosen = false;
+        Debug.Log("[Rotate] Press ← or →");
+        while (!chosen)
+        {
+            if (Input.GetKeyDown(KeyCode.LeftArrow)) { clockwise = false; chosen = true; }
+            if (Input.GetKeyDown(KeyCode.RightArrow)) { clockwise = true; chosen = true; }
+            yield return null;
+        }
+        
+
+        // Логическая и визуальная ротация для всех блоков
+        List<Coroutine> rotations = new List<Coroutine>();
+        // 🔹 Логическая ротация всех выбранных блоков
+        foreach (var b in selectedBlocks)
+        {
+            RotateBlockData(b.bx,b.by, clockwise);
+            // вызываем RotateRoutine с выбранным направлением
+            rotations.Add(StartCoroutine(b.RotateRoutine(clockwise)));
+        }
+
+        // Ждем пока все блоки повернутся
+        foreach (var r in rotations)
+            yield return r;
+
+        // Опускаем все блоки
+        List<Coroutine> lowers = new List<Coroutine>();
+        foreach (var b in selectedBlocks)
+        {
+            lowers.Add(StartCoroutine(b.LowerCoroutine())); // LowerCoroutine должна быть public
+        }
+
+        // Ждем пока все блоки опустятся
+        foreach (var l in lowers)
+            yield return l;
+
+        // После вращения очищаем список и меняем фазу
+        selectedBlocks.Clear();
+        currentPhase = GamePhase.PlaceMark;  // переключаем X ↔ O
+
+        Debug.Log("[Phase] PlaceMark");
+
+        // Включаем коллайдеры для клеток
+        SetAllBlockColliders(false); // если нужно
     }
+
+
+
+    /*public void ConfirmRotation()
+    {
+        foreach(var b in selectedBlocks)
+        {
+            if (b == null) return;
+
+            b.Rotate();
+        }
+    }*/
 
     public void PlaceMark(int x, int y)
     {
@@ -312,6 +412,7 @@ public class BoardManagerMono : MonoBehaviour
             return;
         }
 
+
         // переход к фазе вращения
         currentPhase = GamePhase.RotateBlock;
         SetAllBlockColliders(true);
@@ -324,7 +425,7 @@ public class BoardManagerMono : MonoBehaviour
 
     public void OnRotationFinished()
     {
-        selectedBlock = null;
+        selectedBlocks = null;
         currentPhase = GamePhase.PlaceMark;
 
         SetAllBlockColliders(false);
@@ -337,3 +438,4 @@ public class BoardManagerMono : MonoBehaviour
             b.SetCollider(active);
     }
 }
+
