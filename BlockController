@@ -7,7 +7,7 @@ using UnityEngine.InputSystem;
 
 public class BlockController : MonoBehaviour
 {
-    private int bx, by;
+    public int bx, by;
     private BoardManagerMono board;
     private BoxCollider col;
 
@@ -30,27 +30,87 @@ public class BlockController : MonoBehaviour
 
     public void Raise()
     {
-        Debug.Log($"[Visual] Raising block {bx},{by}");
         if (isRaised) return;
-        StopAllCoroutines();
-        StartCoroutine(MoveTo(basePosition + Vector3.up * 0.5f));
+        StartCoroutine(RaiseCoroutine());
+    }
+
+    public IEnumerator RaiseCoroutine()
+    {
+        Vector3 startPos = transform.position;
+        Vector3 targetPos = basePosition + Vector3.up * 0.5f;
+        float t = 0f;
+        float duration = 0.2f;
+
+        while (t < 1f)
+        {
+            t += Time.deltaTime / duration;
+            transform.position = Vector3.Lerp(startPos, targetPos, t);
+            yield return null;
+        }
+
         isRaised = true;
     }
+
 
     public void Lower()
     {
         if (!isRaised) return;
-        StopAllCoroutines();
-        StartCoroutine(MoveTo(basePosition));
-        isRaised = false;
+        StartCoroutine(LowerCoroutine());
     }
 
-    public void Rotate()
+    public IEnumerator LowerCoroutine()
+{
+    Vector3 startPos = transform.position;
+    Vector3 targetPos = basePosition;
+    float t = 0f;
+    float duration = 0.2f;
+
+    while (t < 1f)
+    {
+        t += Time.deltaTime / duration;
+        transform.position = Vector3.Lerp(startPos, targetPos, t);
+        yield return null;
+    }
+
+    isRaised = false;
+}
+
+
+   /*public void Rotate()
     {
         StartCoroutine(RotateRoutine());
+    }*/
+    public IEnumerator WaitForRaise()
+    {
+        while (!isRaised)
+            yield return null;
     }
 
-    public IEnumerator RotateRoutine()
+    public IEnumerator RotateRoutine(bool clockwise)
+    {
+
+        Quaternion startRot = transform.rotation;
+
+        // округляем текущий угол Y к ближайшему кратному 90°
+        Vector3 euler = startRot.eulerAngles;
+        euler.y = Mathf.Round(euler.y / 90f) * 90f;
+        startRot = Quaternion.Euler(euler);
+
+        Quaternion targetRot = startRot * Quaternion.Euler(0, clockwise ? 90f : -90f, 0);
+
+        float t = 0f;
+        float duration = 0.3f;
+        while (t < 1f)
+        {
+            t += Time.deltaTime / duration;
+            transform.rotation = Quaternion.Slerp(startRot, targetRot, t);
+            yield return null;
+        }
+    }
+
+
+
+    /*public IEnumerator RotateRoutine()
     {
 
         Vector3 startPos = transform.position;
@@ -98,7 +158,7 @@ public class BlockController : MonoBehaviour
         }
 
         board.OnRotationFinished();
-    }
+    }*/
 
     IEnumerator MoveTo(Vector3 target)
     {
