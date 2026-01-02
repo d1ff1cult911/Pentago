@@ -1,0 +1,227 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class SimplePentagoAI
+{
+    private BoardManagerMono board;
+    private int aiIndex;
+    private int opponentIndex;
+
+    public SimplePentagoAI(BoardManagerMono board, int aiIndex)
+    {
+        this.board = board;
+        this.aiIndex = aiIndex;
+        this.opponentIndex = (aiIndex + 1) % board.playerCount;
+    }
+
+    // =====================================================
+    // 🔹 ВХОД
+    // =====================================================
+    public void StartMove()
+    {
+        board.StartCoroutine(AIMoveRoutine());
+    }
+
+    // =====================================================
+    // 🔹 ОСНОВНОЙ ХОД
+    // =====================================================
+    private IEnumerator AIMoveRoutine()
+    {
+        // 1️⃣ ставим метку
+        Vector2Int cell = ChooseBestCell();
+        board.PlaceMark(cell.x, cell.y);
+        if (board.gameOver)
+            yield break;
+
+        yield return null;
+
+        // 2️⃣ выбираем вращение
+        RotationDecision rotation = ChooseBestRotation();
+
+        foreach (var b in rotation.blocks)
+            b.Raise();
+
+        foreach (var b in rotation.blocks)
+            yield return b.WaitForRaise();
+
+        List<Coroutine> rotations = new();
+        foreach (var b in rotation.blocks)
+            rotations.Add(board.StartCoroutine(b.RotateRoutine(rotation.clockwise)));
+
+        foreach (var r in rotations)
+            yield return r;
+
+        foreach (var b in rotation.blocks)
+            board.StartCoroutine(b.LowerCoroutine());
+
+        yield return null;
+
+        // 3️⃣ конец хода
+        board.selectedBlocks.Clear();
+        board.currentPhase = BoardManagerMono.GamePhase.PlaceMark;
+        board.currentPlayer = (board.currentPlayer + 1) % board.playerCount;
+        board.SetAllBlockColliders(false);
+        board.aiTurnStarted = false;
+
+        Debug.Log("[AI] Turn finished");
+    }
+
+    // =====================================================
+    // 🧠 ВЫБОР КЛЕТКИ
+    // =====================================================
+    private Vector2Int ChooseBestCell()
+    {
+        int size = board.blocksPerSide * board.blockSize;
+
+        if (TryFindWinningCell(aiIndex, out var win))
+            return win;
+
+        if (TryFindWinningCell(opponentIndex, out var block))
+            return block;
+
+        int c = size / 2;
+        if (board.IsCellEmpty(c, c))
+            return new Vector2Int(c, c);
+
+        for (int x = 0; x < size; x++)
+            for (int y = 0; y < size; y++)
+                if (board.IsCellEmpty(x, y))
+                    return new Vector2Int(x, y);
+
+        return Vector2Int.zero;
+    }
+
+    private bool TryFindWinningCell(int playerIndex, out Vector2Int result)
+    {
+        int size = board.blocksPerSide * board.blockSize;
+        CellState player = (CellState)(playerIndex + 1);
+
+        for (int x = 0; x < size; x++)
+        {
+            for (int y = 0; y < size; y++)
+            {
+                if (!board.IsCellEmpty(x, y)) continue;
+
+                board.board[x, y] = player;
+                bool win = board.CheckWinForPlayer(player);
+                board.board[x, y] = CellState.Empty;
+
+                if (win)
+                {
+                    result = new Vector2Int(x, y);
+                    return true;
+                }
+            }
+        }
+
+        result = Vector2Int.zero;
+        return false;
+    }
+
+    // =====================================================
+    // 🧠 ВЫБОР ВРАЩЕНИЯ
+    // =====================================================
+    private RotationDecision ChooseBestRotation()
+    {
+        List<BlockController> all = GetAllBlocks();
+
+        // 1️⃣ победа ИИ вращением
+        if (TryFindRotationForPlayer(aiIndex, out var win))
+            return win;
+
+        // 2️⃣ блокировка победы игрока
+        if (TryFindRotationForPlayer(opponentIndex, out var block))
+            return block;
+
+        // 3️⃣ fallback
+        return RotationDecision.Fallback(all);
+    }
+
+    private bool TryFindRotationForPlayer(int playerIndex, out RotationDecision decision)
+    {
+        List<BlockController> all = GetAllBlocks();
+        CellState player = (CellState)(playerIndex + 1);
+
+        for (int i = 0; i < all.Count; i++)
+        {
+            for (int j = i + 1; j < all.Count; j++)
+            {
+                for (int k = j + 1; k < all.Count; k++)
+                {
+                    var trio = new List<BlockController>
+                    {
+                        all[i], all[j], all[k]
+                    };
+
+                    foreach (bool cw in new[] { true, false })
+                    {
+                        SimulateRotation(trio, cw);
+
+                        bool win = board.CheckWinForPlayer(player);
+
+                        UndoRotation(trio, cw);
+
+                        if (win)
+                        {
+                            decision = new RotationDecision(trio, cw);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        decision = default;
+        return false;
+    }
+
+    // =====================================================
+    // 🔧 СИМУЛЯЦИЯ
+    // =====================================================
+    private void SimulateRotation(List<BlockController> blocks, bool clockwise)
+    {
+        foreach (var b in blocks)
+            board.RotateBlockData(b.bx, b.by, clockwise);
+    }
+
+    private void UndoRotation(List<BlockController> blocks, bool clockwise)
+    {
+        foreach (var b in blocks)
+            board.RotateBlockData(b.bx, b.by, !clockwise);
+    }
+
+    private List<BlockController> GetAllBlocks()
+    {
+        List<BlockController> list = new();
+
+        for (int x = 0; x < board.blocksPerSide; x++)
+            for (int y = 0; y < board.blocksPerSide; y++)
+                list.Add(board.blocks[x, y]);
+
+        return list;
+    }
+
+    // =====================================================
+    // 📦 СТРУКТУРА
+    // =====================================================
+    private struct RotationDecision
+    {
+        public List<BlockController> blocks;
+        public bool clockwise;
+
+        public RotationDecision(List<BlockController> blocks, bool clockwise)
+        {
+            this.blocks = blocks;
+            this.clockwise = clockwise;
+        }
+
+        public static RotationDecision Fallback(List<BlockController> all)
+        {
+            return new RotationDecision(
+                new List<BlockController> { all[0], all[1], all[2] },
+                true
+            );
+        }
+    }
+}
