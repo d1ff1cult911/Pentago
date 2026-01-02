@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel.Design.Serialization;
@@ -7,29 +8,35 @@ using UnityEngine.UIElements;
 
 public class BoardManagerMono : MonoBehaviour
 {
-    public enum GamePhase { PlaceMark, RotateBlock }
+    [Header("AI")]
+    [SerializeField] private bool playWithAI = true;
+    [SerializeField] private int aiIndex = 1;
+    public bool aiTurnStarted = false;
+
+    private SimplePentagoAI ai;
+
+    public enum GamePhase { PlaceMark, RotateBlock, GameOver }
     private CellView[,] cellViews;
     public int winLength;
     public int blocksPerSide;
     public int blockSize = 3;
     public GameObject boardRoot;
-    private bool gameOver = false;
+    public bool gameOver = false;
     private CellState winner = CellState.Empty;
     public float gap = 0.2f;
     public float cellSize = 1f;
     public float tableThickness = 0.1f;
-    private int blocksSelected = 0;
     public GamePhase currentPhase = GamePhase.PlaceMark;
     public bool isXTurn = true;
 
     private int boardSize;
-    private CellState[,] board;
+    public CellState[,] board;
 
-    private BlockController[,] blocks;
-    private List<BlockController> selectedBlocks = new List<BlockController>();
+    public BlockController[,] blocks;
+    public List<BlockController> selectedBlocks = new List<BlockController>();
     private const int maxBlocks = 3;
     public int playerCount;
-    private int currentPlayer = 0;
+    public int currentPlayer = 0;
 
     private Color[] playerColors =
     {
@@ -46,7 +53,10 @@ public class BoardManagerMono : MonoBehaviour
         cellViews = new CellView[boardSize, boardSize];
         CreateTable();
         CreateBoard();
-
+        if (playWithAI)
+        {
+            ai = new SimplePentagoAI(this, aiIndex);
+        }
         SetAllBlockColliders(false);
 
         Debug.Log("[Board] Ready. Phase = PlaceMark");
@@ -186,9 +196,47 @@ public class BoardManagerMono : MonoBehaviour
         }
     }
 
+    private void OnWin(CellState winner)
+    {
+        gameOver = true;
 
+        Debug.Log($"🏆 WINNER: {winner}");
+
+        SetAllBlockColliders(false);
+    }
+
+    // Проверка победы на доске
+    public bool CheckWin()
+    {
+        winner = CellState.Empty; // сброс
+        for (int x = 0; x < boardSize; x++)
+        {
+            for (int y = 0; y < boardSize; y++)
+            {
+                CellState state = board[x, y];
+                if (state == CellState.Empty)
+                    continue;
+
+                // Проверяем все четыре направления
+                if (CheckDirection(x, y, 1, 0, state) ||    // → горизонталь
+                    CheckDirection(x, y, 0, 1, state) ||    // ↓ вертикаль
+                    CheckDirection(x, y, 1, 1, state) ||    // ↘ диагональ вниз
+                    CheckDirection(x, y, 1, -1, state))     // ↗ диагональ вверх
+                {
+                    winner = state;
+                    Debug.Log($"[Win] Player {winner} wins starting at {x},{y}");
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Проверка непрерывной линии в указанном направлении
     private bool CheckDirection(int startX, int startY, int dirX, int dirY, CellState target)
     {
+        int count = 0;
+
         for (int i = 0; i < winLength; i++)
         {
             int x = startX + dirX * i;
@@ -199,34 +247,28 @@ public class BoardManagerMono : MonoBehaviour
 
             if (board[x, y] != target)
                 return false;
+
+            count++;
         }
-        return true;
-    }
-    private void OnWin(CellState winner)
-    {
-        gameOver = true;
 
-        Debug.Log($"🏆 WINNER: {winner}");
-
-        SetAllBlockColliders(false);
+        // Только строго winLength клеток подряд
+        return count == winLength;
     }
 
-    private bool CheckWin()
+    // Проверка победы для конкретного игрока (используется для ИИ)
+    public bool CheckWinForPlayer(CellState player)
     {
         for (int x = 0; x < boardSize; x++)
         {
             for (int y = 0; y < boardSize; y++)
             {
-                CellState state = board[x, y];
-                if (state == CellState.Empty)
-                    continue;
+                if (board[x, y] != player) continue;
 
-                if (CheckDirection(x, y, 1, 0, state) ||     // →
-                    CheckDirection(x, y, 0, 1, state) ||     // ↓
-                    CheckDirection(x, y, 1, 1, state) ||     // ↘️
-                    CheckDirection(x, y, 1, -1, state))      // ↗️
+                if (CheckDirection(x, y, 1, 0, player) ||
+                    CheckDirection(x, y, 0, 1, player) ||
+                    CheckDirection(x, y, 1, 1, player) ||
+                    CheckDirection(x, y, 1, -1, player))
                 {
-                    winner = state;
                     return true;
                 }
             }
@@ -235,31 +277,56 @@ public class BoardManagerMono : MonoBehaviour
     }
 
 
+
     void Update()
     {
-        if (!Input.GetMouseButtonDown(0)) return;
-
-        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-        if (!Physics.Raycast(ray, out RaycastHit hit)) return;
-
-        CellView cell = hit.transform.GetComponent<CellView>();
-        if (cell != null)
+        // -------- ХОД ИГРОКА --------
+        if (currentPhase == GamePhase.PlaceMark && !IsCurrentPlayerAI())
         {
-            cell.OnClick();
-            return;
+            if (!Input.GetMouseButtonDown(0)) return;
+
+            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+            if (!Physics.Raycast(ray, out RaycastHit hit)) return;
+
+            CellView cell = hit.transform.GetComponent<CellView>();
+            if (cell != null)
+            {
+                cell.OnClick();
+                return;
+            }
         }
 
-        BlockController block =
-            hit.transform.GetComponent<BlockController>() ??
-            hit.transform.GetComponentInParent<BlockController>();
-
-        if (block != null && currentPhase == GamePhase.RotateBlock)
+        // -------- ХОД ИИ --------
+        if (currentPhase == GamePhase.PlaceMark && IsCurrentPlayerAI() && !aiTurnStarted)
         {
-            SelectBlock(block);
+            aiTurnStarted = true;
+            ai.StartMove(); // запускает AIMoveRoutine()
+        }
+
+        // -------- ВЫБОР БЛОКОВ --------
+        if (currentPhase == GamePhase.RotateBlock && !IsCurrentPlayerAI())
+        {
+            if (!Input.GetMouseButtonDown(0)) return;
+
+            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+            if (!Physics.Raycast(ray, out RaycastHit hit)) return;
+
+            BlockController block =
+                hit.transform.GetComponent<BlockController>() ??
+                hit.transform.GetComponentInParent<BlockController>();
+
+            if (block != null)
+                SelectBlock(block);
         }
     }
+    public bool IsCurrentPlayerAI()
+    {
+        return currentPlayer == aiIndex; // aiPlayerIndex — индекс ИИ
+    }
+
     public void RotateBlockData(int bx, int by, bool clockwise)
     {
+
         int startX = bx * blockSize;
         int startY = by * blockSize;
 
@@ -276,23 +343,19 @@ public class BoardManagerMono : MonoBehaviour
                 int ny = clockwise ? blockSize - 1 - x : x;
                 board[startX + nx, startY + ny] = temp[x, y];
             }
+        UpdateCellViewsAfterRotation(bx, by, clockwise);
         if (CheckWin())
         {
             OnWin(winner);
             return;
         }
 
-        // следующий игрок
-        currentPlayer = (currentPlayer + 1) % playerCount;
 
-        currentPhase = GamePhase.PlaceMark;
-
-        UpdateCellViewsAfterRotation(bx, by, clockwise);
         Debug.Log($"[Logic] Block {bx},{by} rotated {(clockwise ? "CW" : "CCW")}");
 
     }
 
-    void SelectBlock(BlockController block)
+    public void SelectBlock(BlockController block)
     {
         if (block == null) return;
         if (selectedBlocks.Contains(block)) return;
@@ -365,19 +428,30 @@ public class BoardManagerMono : MonoBehaviour
 
         // Включаем коллайдеры для клеток
         SetAllBlockColliders(false); // если нужно
-    }
+        currentPlayer = (currentPlayer + 1) % playerCount;
+        Debug.Log($"[Turn] Current player = {currentPlayer}");
 
-
-
-    /*public void ConfirmRotation()
-    {
-        foreach(var b in selectedBlocks)
+        // 🤖 запуск ИИ, если его ход
+        if (playWithAI && currentPlayer == aiIndex && !aiTurnStarted)
         {
-            if (b == null) return;
-
-            b.Rotate();
+            StartCoroutine(AiTurnCoroutine());
         }
-    }*/
+        if (currentPlayer != aiIndex)
+        {
+            aiTurnStarted = false;
+        }
+
+    }
+    private IEnumerator AiTurnCoroutine()
+    {
+        aiTurnStarted = true;
+
+        yield return new WaitForSeconds(0.5f);
+
+        ai.StartMove();
+
+        // ❗ НЕ сбрасываем флаг здесь
+    }
 
     public void PlaceMark(int x, int y)
     {
@@ -393,49 +467,69 @@ public class BoardManagerMono : MonoBehaviour
         if (board[x, y] != CellState.Empty)
             return;
 
-        // текущий игрок
         CellState playerState = (CellState)(currentPlayer + 1);
 
-        // логика
         board[x, y] = playerState;
 
-        // визуал
         CellView cv = cellViews[x, y];
         cv.SetColor(playerColors[currentPlayer]);
 
         Debug.Log($"[Move] Player {playerState} at {x},{y}");
 
-        // 🔥 ПРОВЕРКА ПОБЕДЫ ПОСЛЕ ХОДА
+        // Проверяем победу
         if (CheckWin())
         {
-            OnWin(winner);
-            return;
+            OnWin(winner); // завершение игры
+            currentPhase = GamePhase.GameOver; // запрещаем дальнейшие ходы
+            return; // выходим — больше ничего не делаем
         }
 
-
-        // переход к фазе вращения
+        // Если победы нет, переходим к фазе вращения
         currentPhase = GamePhase.RotateBlock;
         SetAllBlockColliders(true);
 
-        // смена игрока будет ПОСЛЕ вращения
+        // Смена игрока будет после вращения
     }
 
 
 
 
-    public void OnRotationFinished()
-    {
-        selectedBlocks = null;
-        currentPhase = GamePhase.PlaceMark;
-
-        SetAllBlockColliders(false);
-        Debug.Log("[Phase] PlaceMark");
-    }
-
-    void SetAllBlockColliders(bool active)
+    public void SetAllBlockColliders(bool active)
     {
         foreach (var b in blocks)
             b.SetCollider(active);
     }
+    public bool IsCellEmpty(int x, int y)
+    {
+        return board[x, y] == CellState.Empty;
+    }
+    public List<Vector2Int> GetAllEmptyCells()
+    {
+        List<Vector2Int> result = new List<Vector2Int>();
+
+        for (int x = 0; x < boardSize; x++)
+            for (int y = 0; y < boardSize; y++)
+                if (board[x, y] == CellState.Empty)
+                    result.Add(new Vector2Int(x, y));
+
+        return result;
+    }
+    public List<List<BlockController>> GetAllBlockTriples()
+    {
+        List<List<BlockController>> result = new List<List<BlockController>>();
+
+        List<BlockController> all = new List<BlockController>();
+        foreach (var b in blocks)
+            all.Add(b);
+
+        for (int i = 0; i < all.Count; i++)
+            for (int j = i + 1; j < all.Count; j++)
+                for (int k = j + 1; k < all.Count; k++)
+                    result.Add(new List<BlockController> { all[i], all[j], all[k] });
+
+        return result;
+    }
+
+
 }
 
