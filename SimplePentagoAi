@@ -47,11 +47,13 @@ public class SimplePentagoAI
 
         List<Coroutine> rotations = new();
         foreach (var b in rotation.blocks)
+        {
             rotations.Add(board.StartCoroutine(b.RotateRoutine(rotation.clockwise)));
-
+            board.RotateBlockData(b.bx, b.by, rotation.clockwise);
+        }
         foreach (var r in rotations)
             yield return r;
-
+        DebugPrintBoard("AFTER VISUAL ROTATION AI");
         foreach (var b in rotation.blocks)
             board.StartCoroutine(b.LowerCoroutine());
 
@@ -65,6 +67,28 @@ public class SimplePentagoAI
         board.aiTurnStarted = false;
 
         Debug.Log("[AI] Turn finished");
+    }
+    public void DebugPrintBoard(string label)
+    {
+        Debug.Log("===== BOARD STATE: " + label + " =====");
+
+        for (int y = board.boardSize - 1; y >= 0; y--)
+        {
+            string line = "";
+            for (int x = 0; x < board.boardSize; x++)
+            {
+                switch (board.board[x, y])
+                {
+                    case CellState.Empty: line += ". "; break;
+                    case CellState.P1: line += "p1 "; break;
+                    case CellState.P2: line += "p2 "; break;
+                    default: line += "? "; break;
+                }
+            }
+            Debug.Log(line);
+        }
+
+        Debug.Log("=================================");
     }
 
     // =====================================================
@@ -182,13 +206,13 @@ public class SimplePentagoAI
     private void SimulateRotation(List<BlockController> blocks, bool clockwise)
     {
         foreach (var b in blocks)
-            board.RotateBlockData(b.bx, b.by, clockwise);
+            board.RotateBlockDataLogicOnly(b.bx, b.by, !clockwise);
     }
 
     private void UndoRotation(List<BlockController> blocks, bool clockwise)
     {
         foreach (var b in blocks)
-            board.RotateBlockData(b.bx, b.by, !clockwise);
+            board.RotateBlockDataLogicOnly(b.bx, b.by,clockwise);
     }
 
     private List<BlockController> GetAllBlocks()
