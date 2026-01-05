@@ -1,0 +1,16 @@
+using UnityEngine;
+
+[System.Serializable]
+public struct BlockTriple
+{
+    public Vector2Int a;
+    public Vector2Int b;
+    public Vector2Int c;
+
+    public BlockTriple(Vector2Int a, Vector2Int b, Vector2Int c)
+    {
+        this.a = a;
+        this.b = b;
+        this.c = c;
+    }
+}
