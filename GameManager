@@ -1,7 +1,11 @@
+using TMPro;
 using UnityEngine;
 
 public class GameManager : MonoBehaviour
 {
+    [Header("UI")]
+    public Canvas winCanvas;
+    public TMP_Text winText;
     public static GameManager Instance;
     public int blocksPerSide = 3;
     public int blockSize = 3;
@@ -13,7 +17,9 @@ public class GameManager : MonoBehaviour
     {
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
+        winCanvas.enabled = false;
     }
+
 
     void Start()
     {
@@ -24,5 +30,10 @@ public class GameManager : MonoBehaviour
         boardManager.blockSize = blockSize;
         boardManager.playerCount = playerCount;
         boardManager.winLength = winlength;
+    }
+    public void ShowWin(CellState winner)
+    {
+        winCanvas.enabled = true;
+        winText.text = $"Игрок {winner} победил!";
     }
 }
