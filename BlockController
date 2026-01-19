@@ -104,16 +104,5 @@ public class BlockController : MonoBehaviour
     }
 
 
-    IEnumerator MoveTo(Vector3 target)
-    {
-        Vector3 start = transform.position;
-        float t = 0;
-
-        while (t < 1)
-        {
-            t += Time.deltaTime / 0.2f;
-            transform.position = Vector3.Lerp(start, target, t);
-            yield return null;
-        }
-    }
+    
 }
