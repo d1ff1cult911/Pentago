@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 public class CellView : MonoBehaviour
@@ -15,6 +16,7 @@ public class CellView : MonoBehaviour
 
     public void OnClick()
     {
+
         board.PlaceMark(x, y);
     }
     public void SetCoords(int newX, int newY)
@@ -29,6 +31,30 @@ public class CellView : MonoBehaviour
 
         meshRenderer.material.color = color;
     }
-    
+    public void Highlight()
+    {
+        var renderer = GetComponent<MeshRenderer>();
+        renderer.material.color = Color.yellow;
+    }
+
+    public void StartWinPulse()
+    {
+        StartCoroutine(WinPulseCoroutine());
+    }
+
+    public IEnumerator WinPulseCoroutine()
+    {
+        Vector3 baseScale = transform.localScale;
+        float t = 0f;
+
+        while (true)
+        {
+            t += Time.deltaTime * 3f;
+            float scale = 1f + Mathf.Sin(t) * 0.15f;
+            transform.localScale = baseScale * scale;
+            yield return null;
+        }
+    }
+
 
 }
