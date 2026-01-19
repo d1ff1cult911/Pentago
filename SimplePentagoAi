@@ -31,6 +31,7 @@ public class SimplePentagoAI
         // 1️⃣ ставим метку
         Vector2Int cell = ChooseBestCell();
         board.PlaceMark(cell.x, cell.y);
+        yield return new WaitForSeconds(1f);
         if (board.gameOver)
             yield break;
 
@@ -38,7 +39,6 @@ public class SimplePentagoAI
 
         // 2️⃣ выбираем вращение
         RotationDecision rotation = ChooseBestRotation();
-
         foreach (var b in rotation.blocks)
             b.Raise();
 
