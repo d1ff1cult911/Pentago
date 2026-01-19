@@ -13,8 +13,10 @@ public class BoardManagerMono : MonoBehaviour
     public bool aiTurnStarted = false;
 
     private SimplePentagoAI ai;
+    [SerializeField] private Canvas winCanvas;
+    [SerializeField] private UnityEngine.UI.Text winText;
 
-    public enum GamePhase { PlaceMark, RotateBlock, GameOver }
+    public enum GamePhase { PlaceMark,   RotateBlock, GameOver }
     private CellView[,] cellViews;
     public int winLength;
     public bool playWithAI;
@@ -28,6 +30,7 @@ public class BoardManagerMono : MonoBehaviour
     public float tableThickness = 0.1f;
     public GamePhase currentPhase = GamePhase.PlaceMark;
     public bool isXTurn = true;
+    private List<Vector2Int> lastWinLine = new List<Vector2Int>();
 
     public int boardSize;
     public CellState[,] board;
@@ -76,6 +79,76 @@ public class BoardManagerMono : MonoBehaviour
 
         Destroy(table.GetComponent<BoxCollider>()); // столу коллайдер не нужен
     }
+    private bool FindWinLine(out List<Vector2Int> winLine)
+    {
+        winLine = new List<Vector2Int>();
+
+        for (int x = 0; x < boardSize; x++)
+        {
+            for (int y = 0; y < boardSize; y++)
+            {
+                CellState state = board[x, y];
+                if (state == CellState.Empty)
+                    continue;
+
+                if (CollectDirection(x, y, 1, 0, state, out winLine) ||   // →
+                    CollectDirection(x, y, 0, 1, state, out winLine) ||   // ↓
+                    CollectDirection(x, y, 1, 1, state, out winLine) ||   // ↘
+                    CollectDirection(x, y, 1, -1, state, out winLine))    // ↗
+                {
+                    return true;
+                }
+            }
+        }
+
+        winLine.Clear();
+        return false;
+    }
+    private bool CollectDirection(
+    int startX,
+    int startY,
+    int dirX,
+    int dirY,
+    CellState target,
+    out List<Vector2Int> result)
+    {
+        result = new List<Vector2Int>();
+
+        int x = startX;
+        int y = startY;
+
+        while (x >= 0 && x < boardSize && y >= 0 && y < boardSize)
+        {
+            if (board[x, y] == target)
+            {
+                result.Add(new Vector2Int(x, y));
+
+                if (result.Count >= winLength)
+                    return true;
+            }
+            else
+            {
+                result.Clear();
+            }
+
+            x += dirX;
+            y += dirY;
+        }
+
+        result.Clear();
+        return false;
+    }
+    private void HighlightWinLine(List<Vector2Int> line)
+    {
+        foreach (var pos in line)
+        {
+            CellView cv = cellViews[pos.x, pos.y];
+            cv.StartWinPulse();
+
+        }
+    }
+
+
 
     void CreateBoard()
     {
@@ -203,7 +276,16 @@ public class BoardManagerMono : MonoBehaviour
         Debug.Log($"🏆 WINNER: {winner}");
 
         SetAllBlockColliders(false);
+
+        if (FindWinLine(out var line))
+        {
+            HighlightWinLine(line);
+        }
+        GameManager.Instance.ShowWin(winner);
+
     }
+
+
 
     // Проверка победы на доске
     public bool CheckWin()
@@ -431,8 +513,8 @@ public class BoardManagerMono : MonoBehaviour
         // после того как все RotateBlockData уже вызваны
         if (CheckWin())
         {
-            OnWin(winner);
-            yield break;
+            currentPhase = GamePhase.GameOver;
+            StartCoroutine(DelayedWinCoroutine(winner));
         }
 
 
@@ -475,6 +557,14 @@ public class BoardManagerMono : MonoBehaviour
         }
 
     }
+    private IEnumerator DelayedWinCoroutine(CellState winner)
+    {
+        // Ждём пока визуальные анимации закончатся
+        yield return new WaitForSeconds(0.4f);
+
+        OnWin(winner);
+    }
+
     public void DebugPrintBoard(string label)
     {
         Debug.Log("===== BOARD STATE: " + label + " =====");
@@ -535,8 +625,9 @@ public class BoardManagerMono : MonoBehaviour
         // Проверяем победу
         if (CheckWin())
         {
-            OnWin(winner); // завершение игры
-            currentPhase = GamePhase.GameOver; // запрещаем дальнейшие ходы
+            currentPhase = GamePhase.GameOver;
+            StartCoroutine(DelayedWinCoroutine(winner)); // завершение игры
+             // запрещаем дальнейшие ходы
             return; // выходим — больше ничего не делаем
         }
 
