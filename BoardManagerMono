@@ -30,7 +30,6 @@ public class BoardManagerMono : MonoBehaviour
     public float tableThickness = 0.1f;
     public GamePhase currentPhase = GamePhase.PlaceMark;
     public bool isXTurn = true;
-    private List<Vector2Int> lastWinLine = new List<Vector2Int>();
 
     public int boardSize;
     public CellState[,] board;
@@ -50,6 +49,7 @@ public class BoardManagerMono : MonoBehaviour
 };
     void Start()
     {
+        winLength = blocksPerSide;
         boardSize = blocksPerSide * blockSize;
         board = new CellState[boardSize, boardSize];
         blocks = new BlockController[blocksPerSide, blocksPerSide];
@@ -77,7 +77,7 @@ public class BoardManagerMono : MonoBehaviour
         table.GetComponent<MeshRenderer>().material.color =
             new Color(0.6f, 0.3f, 0.1f);
 
-        Destroy(table.GetComponent<BoxCollider>()); // столу коллайдер не нужен
+        Destroy(table.GetComponent<BoxCollider>());
     }
     private bool FindWinLine(out List<Vector2Int> winLine)
     {
@@ -175,7 +175,6 @@ public class BoardManagerMono : MonoBehaviour
                 bc.Init(bx, by, this);
                 blocks[bx, by] = bc;
 
-                // Подложка
                 GameObject baseGO = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 baseGO.transform.parent = blockGO.transform;
                 baseGO.transform.localScale =
@@ -185,7 +184,6 @@ public class BoardManagerMono : MonoBehaviour
 
                 Destroy(baseGO.GetComponent<BoxCollider>());
 
-                // Клетки
                 for (int x = 0; x < blockSize; x++)
                 {
                     for (int y = 0; y < blockSize; y++)
@@ -219,12 +217,10 @@ public class BoardManagerMono : MonoBehaviour
 
         CellView[,] temp = new CellView[blockSize, blockSize];
 
-        // Сохраняем старые ссылки
         for (int x = 0; x < blockSize; x++)
             for (int y = 0; y < blockSize; y++)
                 temp[x, y] = cellViews[startX + x, startY + y];
 
-        // Перекладываем
         for (int x = 0; x < blockSize; x++)
         {
             for (int y = 0; y < blockSize; y++)
@@ -235,7 +231,6 @@ public class BoardManagerMono : MonoBehaviour
                 CellView cv = temp[x, y];
                 cellViews[startX + nx, startY + ny] = cv;
 
-                // 🔥 ОБНОВЛЯЕМ КООРДИНАТЫ
                 cv.SetCoords(startX + nx, startY + ny);
             }
         }
@@ -245,7 +240,7 @@ public class BoardManagerMono : MonoBehaviour
     {
         foreach (var b in blocks)
         {
-            int bx = b.bx; // сделай свойство Bx/BY public
+            int bx = b.bx;
             int by = b.by;
 
             int startX = bx * blockSize;
@@ -253,12 +248,10 @@ public class BoardManagerMono : MonoBehaviour
 
             CellState[,] temp = new CellState[blockSize, blockSize];
 
-            // копируем текущие значения
             for (int x = 0; x < blockSize; x++)
                 for (int y = 0; y < blockSize; y++)
                     temp[x, y] = board[startX + x, startY + y];
 
-            // поворачиваем
             for (int x = 0; x < blockSize; x++)
                 for (int y = 0; y < blockSize; y++)
                 {
@@ -287,10 +280,9 @@ public class BoardManagerMono : MonoBehaviour
 
 
 
-    // Проверка победы на доске
     public bool CheckWin()
     {
-        winner = CellState.Empty; // сброс
+        winner = CellState.Empty;
         for (int x = 0; x < boardSize; x++)
         {
             for (int y = 0; y < boardSize; y++)
@@ -299,11 +291,10 @@ public class BoardManagerMono : MonoBehaviour
                 if (state == CellState.Empty)
                     continue;
 
-                // Проверяем все четыре направления
-                if (CheckDirection(x, y, 1, 0, state) ||    // → горизонталь
-                    CheckDirection(x, y, 0, 1, state) ||    // ↓ вертикаль
-                    CheckDirection(x, y, 1, 1, state) ||    // ↘ диагональ вниз
-                    CheckDirection(x, y, 1, -1, state))     // ↗ диагональ вверх
+                if (CheckDirection(x, y, 1, 0, state) ||
+                    CheckDirection(x, y, 0, 1, state) ||    
+                    CheckDirection(x, y, 1, 1, state) ||    
+                    CheckDirection(x, y, 1, -1, state))     
                 {
                     winner = state;
                     Debug.Log($"[Win] Player {winner} wins starting at {x},{y}");
@@ -314,7 +305,6 @@ public class BoardManagerMono : MonoBehaviour
         return false;
     }
 
-    // Проверка непрерывной линии в указанном направлении
     private bool CheckDirection(int startX, int startY, int dirX, int dirY, CellState target)
     {
         int count = 0;
@@ -344,7 +334,6 @@ public class BoardManagerMono : MonoBehaviour
 
 
 
-    // Проверка победы для конкретного игрока (используется для ИИ)
     public bool CheckWinForPlayer(CellState player)
     {
         for (int x = 0; x < boardSize; x++)
@@ -369,7 +358,6 @@ public class BoardManagerMono : MonoBehaviour
 
     void Update()
     {
-        // -------- ХОД ИГРОКА --------
         if ((currentPhase == GamePhase.PlaceMark && !IsCurrentPlayerAI() && playWithAI == true) | (currentPhase == GamePhase.PlaceMark && playWithAI == false))
         {
             if (!Input.GetMouseButtonDown(0)) return;
@@ -385,14 +373,12 @@ public class BoardManagerMono : MonoBehaviour
             }
         }
 
-        // -------- ХОД ИИ --------
         if (currentPhase == GamePhase.PlaceMark && IsCurrentPlayerAI() && !aiTurnStarted && playWithAI == true)
         {
             aiTurnStarted = true;
-            ai.StartMove(); // запускает AIMoveRoutine()
+            ai.StartMove();
         }
 
-        // -------- ВЫБОР БЛОКОВ --------
         if ((currentPhase == GamePhase.RotateBlock && !IsCurrentPlayerAI()&&playWithAI == true)|(currentPhase == GamePhase.RotateBlock &&playWithAI == false))
         {
             if (!Input.GetMouseButtonDown(0)) return;
@@ -410,7 +396,7 @@ public class BoardManagerMono : MonoBehaviour
     }
     public bool IsCurrentPlayerAI()
     {
-        return currentPlayer == aiIndex; // aiPlayerIndex — индекс ИИ
+        return currentPlayer == aiIndex;
     }
 
     public void RotateBlockData(int bx, int by, bool clockwise)
@@ -483,11 +469,9 @@ public class BoardManagerMono : MonoBehaviour
 
     private IEnumerator RotateSelectedBlocks()
     {
-        // Ждем, пока все блоки поднимутся
         foreach (var b in selectedBlocks)
             yield return b.WaitForRaise();
 
-        // Определяем направление вращения
         bool clockwise = false;
         bool chosen = false;
         Debug.Log("[Rotate] Press ← or →");
@@ -500,17 +484,13 @@ public class BoardManagerMono : MonoBehaviour
         DebugPrintBoard("BEFORE ROTATION");
 
 
-        // Логическая и визуальная ротация для всех блоков
         List<Coroutine> rotations = new List<Coroutine>();
-        // 🔹 Логическая ротация всех выбранных блоков
         foreach (var b in selectedBlocks)
         {
             RotateBlockData(b.bx, b.by, clockwise);
-            // вызываем RotateRoutine с выбранным направлением
             rotations.Add(StartCoroutine(b.RotateRoutine(clockwise)));
         }
         DebugPrintBoard("After Rotation");
-        // после того как все RotateBlockData уже вызваны
         if (CheckWin())
         {
             currentPhase = GamePhase.GameOver;
@@ -518,35 +498,29 @@ public class BoardManagerMono : MonoBehaviour
         }
 
 
-        // Ждем пока все блоки повернутся
         foreach (var r in rotations)
             yield return r;
         DebugPrintBoard("AFTER VISUAL ROTATION");
 
-
-        // Опускаем все блоки
         List<Coroutine> lowers = new List<Coroutine>();
         foreach (var b in selectedBlocks)
         {
-            lowers.Add(StartCoroutine(b.LowerCoroutine())); // LowerCoroutine должна быть public
+            lowers.Add(StartCoroutine(b.LowerCoroutine()));
         }
 
-        // Ждем пока все блоки опустятся
         foreach (var l in lowers)
             yield return l;
 
-        // После вращения очищаем список и меняем фазу
+
         selectedBlocks.Clear();
-        currentPhase = GamePhase.PlaceMark;  // переключаем X ↔ O
+        currentPhase = GamePhase.PlaceMark;
 
         Debug.Log("[Phase] PlaceMark");
 
-        // Включаем коллайдеры для клеток
-        SetAllBlockColliders(false); // если нужно
+        SetAllBlockColliders(false);
         currentPlayer = (currentPlayer + 1) % playerCount;
         Debug.Log($"[Turn] Current player = {currentPlayer}");
 
-        // 🤖 запуск ИИ, если его ход
         if (playWithAI && currentPlayer == aiIndex && !aiTurnStarted)
         {
             StartCoroutine(AiTurnCoroutine());
@@ -559,7 +533,6 @@ public class BoardManagerMono : MonoBehaviour
     }
     private IEnumerator DelayedWinCoroutine(CellState winner)
     {
-        // Ждём пока визуальные анимации закончатся
         yield return new WaitForSeconds(0.4f);
 
         OnWin(winner);
@@ -596,7 +569,6 @@ public class BoardManagerMono : MonoBehaviour
 
         ai.StartMove();
 
-        // ❗ НЕ сбрасываем флаг здесь
     }
 
     public void PlaceMark(int x, int y)
@@ -621,21 +593,15 @@ public class BoardManagerMono : MonoBehaviour
         cv.SetColor(playerColors[currentPlayer]);
 
         Debug.Log($"[Move] Player {playerState} at {x},{y}");
-
-        // Проверяем победу
         if (CheckWin())
         {
             currentPhase = GamePhase.GameOver;
-            StartCoroutine(DelayedWinCoroutine(winner)); // завершение игры
-             // запрещаем дальнейшие ходы
-            return; // выходим — больше ничего не делаем
+            StartCoroutine(DelayedWinCoroutine(winner));
+            return; 
         }
-
-        // Если победы нет, переходим к фазе вращения
         currentPhase = GamePhase.RotateBlock;
         SetAllBlockColliders(true);
 
-        // Смена игрока будет после вращения
     }
 
 
