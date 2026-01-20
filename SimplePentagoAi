@@ -15,20 +15,12 @@ public class SimplePentagoAI
         this.opponentIndex = (aiIndex + 1) % board.playerCount;
     }
 
-    // =====================================================
-    // 🔹 ВХОД
-    // =====================================================
     public void StartMove()
     {
         board.StartCoroutine(AIMoveRoutine());
     }
-
-    // =====================================================
-    // 🔹 ОСНОВНОЙ ХОД
-    // =====================================================
     private IEnumerator AIMoveRoutine()
     {
-        // 1️⃣ ставим метку
         Vector2Int cell = ChooseBestCell();
         board.PlaceMark(cell.x, cell.y);
         yield return new WaitForSeconds(1f);
@@ -37,7 +29,6 @@ public class SimplePentagoAI
 
         yield return null;
 
-        // 2️⃣ выбираем вращение
         RotationDecision rotation = ChooseBestRotation();
         foreach (var b in rotation.blocks)
             b.Raise();
@@ -59,7 +50,6 @@ public class SimplePentagoAI
 
         yield return null;
 
-        // 3️⃣ конец хода
         board.selectedBlocks.Clear();
         board.currentPhase = BoardManagerMono.GamePhase.PlaceMark;
         board.currentPlayer = (board.currentPlayer + 1) % board.playerCount;
@@ -91,9 +81,6 @@ public class SimplePentagoAI
         Debug.Log("=================================");
     }
 
-    // =====================================================
-    // 🧠 ВЫБОР КЛЕТКИ
-    // =====================================================
     private Vector2Int ChooseBestCell()
     {
         int size = board.blocksPerSide * board.blockSize;
@@ -143,22 +130,14 @@ public class SimplePentagoAI
         return false;
     }
 
-    // =====================================================
-    // 🧠 ВЫБОР ВРАЩЕНИЯ
-    // =====================================================
     private RotationDecision ChooseBestRotation()
     {
         List<BlockController> all = GetAllBlocks();
 
-        // 1️⃣ победа ИИ вращением
         if (TryFindRotationForPlayer(aiIndex, out var win))
             return win;
-
-        // 2️⃣ блокировка победы игрока
         if (TryFindRotationForPlayer(opponentIndex, out var block))
             return block;
-
-        // 3️⃣ fallback
         return RotationDecision.Fallback(all);
     }
 
@@ -200,9 +179,6 @@ public class SimplePentagoAI
         return false;
     }
 
-    // =====================================================
-    // 🔧 СИМУЛЯЦИЯ
-    // =====================================================
     private void SimulateRotation(List<BlockController> blocks, bool clockwise)
     {
         foreach (var b in blocks)
@@ -226,9 +202,6 @@ public class SimplePentagoAI
         return list;
     }
 
-    // =====================================================
-    // 📦 СТРУКТУРА
-    // =====================================================
     private struct RotationDecision
     {
         public List<BlockController> blocks;
