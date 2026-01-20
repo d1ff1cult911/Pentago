@@ -452,10 +452,7 @@ public class BoardManagerMono : MonoBehaviour
 
         if (selectedBlocks.Count >= maxBlocks)
         {
-            BlockController first = selectedBlocks[0];
-            if (first != null)
-                first.Lower();
-            selectedBlocks.RemoveAt(0);
+            return;
         }
 
         selectedBlocks.Add(block);
