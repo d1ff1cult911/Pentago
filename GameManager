@@ -23,9 +23,8 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        // Создаём доску
         boardManager = gameObject.AddComponent<BoardManagerMono>();
-        boardManager.playWithAI = playerCount==2?true:false;
+        boardManager.playWithAI = playerCount==2&&PlayWithAi?true:false;
         boardManager.blocksPerSide = blocksPerSide;
         boardManager.blockSize = blockSize;
         boardManager.playerCount = playerCount;
