@@ -36,7 +36,7 @@ public class BoardManagerMono : MonoBehaviour
 
     public BlockController[,] blocks;
     public List<BlockController> selectedBlocks = new List<BlockController>();
-    private const int maxBlocks = 3;
+    private int maxBlocks;
     public int playerCount;
     public int currentPlayer = 0;
 
@@ -49,6 +49,7 @@ public class BoardManagerMono : MonoBehaviour
 };
     void Start()
     {
+        maxBlocks = playWithAI ? 3 : blocksPerSide;
         winLength = blocksPerSide;
         boardSize = blocksPerSide * blockSize;
         board = new CellState[boardSize, boardSize];
@@ -91,10 +92,10 @@ public class BoardManagerMono : MonoBehaviour
                 if (state == CellState.Empty)
                     continue;
 
-                if (CollectDirection(x, y, 1, 0, state, out winLine) ||   // →
-                    CollectDirection(x, y, 0, 1, state, out winLine) ||   // ↓
-                    CollectDirection(x, y, 1, 1, state, out winLine) ||   // ↘
-                    CollectDirection(x, y, 1, -1, state, out winLine))    // ↗
+                if (CollectDirection(x, y, 1, 0, state, out winLine) ||   
+                    CollectDirection(x, y, 0, 1, state, out winLine) ||   
+                    CollectDirection(x, y, 1, 1, state, out winLine) ||   
+                    CollectDirection(x, y, 1, -1, state, out winLine))    
                 {
                     return true;
                 }
@@ -104,13 +105,7 @@ public class BoardManagerMono : MonoBehaviour
         winLine.Clear();
         return false;
     }
-    private bool CollectDirection(
-    int startX,
-    int startY,
-    int dirX,
-    int dirY,
-    CellState target,
-    out List<Vector2Int> result)
+    private bool CollectDirection(int startX, int startY, int dirX, int dirY, CellState target,out List<Vector2Int> result)
     {
         result = new List<Vector2Int>();
 
@@ -177,8 +172,7 @@ public class BoardManagerMono : MonoBehaviour
 
                 GameObject baseGO = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 baseGO.transform.parent = blockGO.transform;
-                baseGO.transform.localScale =
-                    new Vector3(blockSize * cellSize * 1.03f, 0.1f, blockSize * cellSize * 1.03f);
+                baseGO.transform.localScale = new Vector3(blockSize * cellSize * 1.03f, 0.1f, blockSize * cellSize * 1.03f);
                 baseGO.transform.localPosition = new Vector3(0, -0.05f, 0);
                 baseGO.GetComponent<MeshRenderer>().material.color = Color.black;
 
@@ -195,8 +189,7 @@ public class BoardManagerMono : MonoBehaviour
                         GameObject cell = GameObject.CreatePrimitive(PrimitiveType.Cube);
                         cell.name = ($"Cell_{gx}_{gy}");
                         cell.transform.parent = blockGO.transform;
-                        cell.transform.localScale =
-                            new Vector3(cellSize * 0.95f, 0.02f, cellSize * 0.95f);
+                        cell.transform.localScale = new Vector3(cellSize * 0.95f, 0.02f, cellSize * 0.95f);
 
                         float cx = (x - blockSize / 2f + 0.5f) * cellSize;
                         float cz = (y - blockSize / 2f + 0.5f) * cellSize;
@@ -236,31 +229,6 @@ public class BoardManagerMono : MonoBehaviour
         }
     }
 
-    public void RotateBlocksData(List<BlockController> blocks, bool clockwise)
-    {
-        foreach (var b in blocks)
-        {
-            int bx = b.bx;
-            int by = b.by;
-
-            int startX = bx * blockSize;
-            int startY = by * blockSize;
-
-            CellState[,] temp = new CellState[blockSize, blockSize];
-
-            for (int x = 0; x < blockSize; x++)
-                for (int y = 0; y < blockSize; y++)
-                    temp[x, y] = board[startX + x, startY + y];
-
-            for (int x = 0; x < blockSize; x++)
-                for (int y = 0; y < blockSize; y++)
-                {
-                    int nx = clockwise ? y : blockSize - 1 - y;
-                    int ny = clockwise ? blockSize - 1 - x : x;
-                    board[startX + nx, startY + ny] = temp[x, y];
-                }
-        }
-    }
 
     private void OnWin(CellState winner)
     {
@@ -277,8 +245,6 @@ public class BoardManagerMono : MonoBehaviour
         GameManager.Instance.ShowWin(winner);
 
     }
-
-
 
     public bool CheckWin()
     {
@@ -601,9 +567,6 @@ public class BoardManagerMono : MonoBehaviour
 
     }
 
-
-
-
     public void SetAllBlockColliders(bool active)
     {
         foreach (var b in blocks)
@@ -613,7 +576,7 @@ public class BoardManagerMono : MonoBehaviour
     {
         return board[x, y] == CellState.Empty;
     }
-    public List<Vector2Int> GetAllEmptyCells()
+    /*public List<Vector2Int> GetAllEmptyCells()
     {
         List<Vector2Int> result = new List<Vector2Int>();
 
@@ -623,22 +586,7 @@ public class BoardManagerMono : MonoBehaviour
                     result.Add(new Vector2Int(x, y));
 
         return result;
-    }
-    public List<List<BlockController>> GetAllBlockTriples()
-    {
-        List<List<BlockController>> result = new List<List<BlockController>>();
-
-        List<BlockController> all = new List<BlockController>();
-        foreach (var b in blocks)
-            all.Add(b);
-
-        for (int i = 0; i < all.Count; i++)
-            for (int j = i + 1; j < all.Count; j++)
-                for (int k = j + 1; k < all.Count; k++)
-                    result.Add(new List<BlockController> { all[i], all[j], all[k] });
-
-        return result;
-    }
+    }*/
 
 }
 
